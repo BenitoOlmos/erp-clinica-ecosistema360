@@ -49,9 +49,20 @@ export const AuthProvider = ({ children }) => {
 
             return { success: true };
         } catch (error) {
+            console.error('Login Error Details:', error);
+
+            let message = 'Error al iniciar sesión';
+            if (error.response?.data?.message) {
+                message = error.response.data.message;
+            } else if (error.message === 'Network Error') {
+                message = 'Error de conexión: El servidor no responde en puerto 3000';
+            } else {
+                message = error.message;
+            }
+
             return {
                 success: false,
-                message: error.response?.data?.message || 'Error al iniciar sesión'
+                message
             };
         }
     };

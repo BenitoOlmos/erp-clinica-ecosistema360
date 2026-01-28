@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Login API</title>
+</head>
+<body>
+    <h1>Test de Login</h1>
+    <button onclick="testLogin()">Probar Login</button>
+    <pre id="result"></pre>
+
+    <script>
+        async function testLogin() {
+            const resultEl = document.getElementById('result');
+            resultEl.textContent = 'Probando login...';
+
+            try {
+                const response = await fetch('http://localhost:3000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        username: 'admin',
+                        password: 'admin123'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultEl.textContent = '✅ LOGIN EXITOSO!\n\n' + JSON.stringify(data, null, 2);
+                } else {
+                    resultEl.textContent = '❌ ERROR:\n\n' + JSON.stringify(data, null, 2);
+                }
+            } catch (error) {
+                resultEl.textContent = '❌ ERROR DE CONEXIÓN:\n\n' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

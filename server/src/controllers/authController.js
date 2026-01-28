@@ -7,9 +7,10 @@ const JWT_EXPIRES_IN = '24h';
 
 // Login
 const login = async (req, res) => {
-    try {
-        const { username, password } = req.body;
+    const { username, password } = req.body;
+    console.log(`📡 LOGIN ATTEMPT: User [${username}] trying to log in...`);
 
+    try {
         // Validar que existan credenciales
         if (!username || !password) {
             return res.status(400).json({ message: 'Usuario y contraseña requeridos' });
@@ -22,17 +23,22 @@ const login = async (req, res) => {
         );
 
         if (users.length === 0) {
+            console.log(`❌ LOGIN FAILED: User [${username}] not found or inactive.`);
             return res.status(401).json({ message: 'Credenciales inválidas' });
         }
 
         const user = users[0];
+        console.log(`✅ USER FOUND: [${user.username}] found in DB. Checking password...`);
 
         // Verificar contraseña
         const isValidPassword = await bcrypt.compare(password, user.password_hash);
 
         if (!isValidPassword) {
+            console.log(`❌ PASSWORD MISMATCH: Invalid password for [${username}].`);
             return res.status(401).json({ message: 'Credenciales inválidas' });
         }
+
+        console.log(`✅ PASSWORD OK: Generating token for [${username}]...`);
 
         // Generar token JWT
         const token = jwt.sign(

@@ -1,20 +1,32 @@
 const pool = require('../config/db');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Configuración de Multer
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        const dir = 'uploads/profesionales';
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        cb(null, dir);
+    },
+    filename: function (req, file, cb) {
+        // Nombre único: rut_timestamp.ext
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, req.body.rut_prof + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+
+const upload = multer({ storage: storage });
 
 // Get all profesionales
 const getAllProfesionales = async (req, res) => {
     try {
-        // Join con Usuarios para obtener nombre si existe vinculación
         const [rows] = await pool.query(`
-      SELECT 
-        p.*,
-        u.nombre_completo,
-        u.email,
-        u.username,
-        u.id_usuario
-      FROM Profesionales p
-      LEFT JOIN Usuarios u ON p.rut_prof = u.rut_profesional
-      ORDER BY p.rut_prof
-    `);
+            SELECT * FROM Profesionales ORDER BY ap_paterno, nombres
+        `);
         res.json(rows);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -25,17 +37,7 @@ const getAllProfesionales = async (req, res) => {
 const getProfesionalByRut = async (req, res) => {
     try {
         const { rut } = req.params;
-        const [rows] = await pool.query(`
-      SELECT 
-        p.*,
-        u.nombre_completo,
-        u.email,
-        u.username,
-        u.id_usuario
-      FROM Profesionales p
-      LEFT JOIN Usuarios u ON p.rut_prof = u.rut_profesional
-      WHERE p.rut_prof = ?
-    `, [rut]);
+        const [rows] = await pool.query('SELECT * FROM Profesionales WHERE rut_prof = ?', [rut]);
 
         if (rows.length === 0) {
             return res.status(404).json({ message: 'Profesional no encontrado' });
@@ -50,26 +52,34 @@ const getProfesionalByRut = async (req, res) => {
 // Create new profesional
 const createProfesional = async (req, res) => {
     try {
-        const { rut_prof, especialidad, tipo_contrato, valor_hora_base, registro_sis } = req.body;
+        // Multer procesa multipart/form-data antes de llegar aquí, si usamos el middleware en la ruta.
+        // Pero como estamos en el controlador, asumiremos que se llama desde la ruta así: router.post('/', upload.single('foto'), createProfesional)
 
-        // Validación básica
-        if (!rut_prof || !especialidad || !tipo_contrato) {
-            return res.status(400).json({ message: 'RUT, especialidad y tipo de contrato son requeridos' });
+        const {
+            rut_prof, nombres, ap_paterno, ap_materno, especialidad,
+            telefono, direccion, comuna, email,
+            tipo_contrato, valor_hora_base, registro_sis, color, activo
+        } = req.body;
+
+        const url_foto = req.file ? `/uploads/profesionales/${req.file.filename}` : null;
+
+        if (!rut_prof || !nombres || !ap_paterno || !especialidad) {
+            return res.status(400).json({ message: 'Campos obligatorios faltantes' });
         }
 
         const [result] = await pool.query(
-            'INSERT INTO Profesionales (rut_prof, especialidad, tipo_contrato, valor_hora_base, registro_sis) VALUES (?, ?, ?, ?, ?)',
-            [rut_prof, especialidad, tipo_contrato, valor_hora_base || 0, registro_sis || null]
+            `INSERT INTO Profesionales 
+            (rut_prof, nombres, ap_paterno, ap_materno, especialidad, telefono, direccion, comuna, email, tipo_contrato, valor_hora_base, registro_sis, color, url_foto, activo) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [rut_prof, nombres, ap_paterno, ap_materno, especialidad, telefono, direccion, comuna, email, tipo_contrato, valor_hora_base || 0, registro_sis, color || '#3b82f6', url_foto, activo !== undefined ? activo : 1]
         );
 
-        res.status(201).json({
-            message: 'Profesional creado exitosamente',
-            rut_prof
-        });
+        res.status(201).json({ message: 'Profesional creado exitosamente', rut_prof });
     } catch (error) {
         if (error.code === 'ER_DUP_ENTRY') {
             return res.status(400).json({ message: 'Ya existe un profesional con este RUT' });
         }
+        console.error(error);
         res.status(500).json({ error: error.message });
     }
 };
@@ -78,12 +88,33 @@ const createProfesional = async (req, res) => {
 const updateProfesional = async (req, res) => {
     try {
         const { rut } = req.params;
-        const { especialidad, tipo_contrato, valor_hora_base, registro_sis } = req.body;
+        const {
+            nombres, ap_paterno, ap_materno, especialidad,
+            telefono, direccion, comuna, email,
+            tipo_contrato, valor_hora_base, registro_sis, color, activo
+        } = req.body;
 
-        const [result] = await pool.query(
-            'UPDATE Profesionales SET especialidad = ?, tipo_contrato = ?, valor_hora_base = ?, registro_sis = ? WHERE rut_prof = ?',
-            [especialidad, tipo_contrato, valor_hora_base, registro_sis, rut]
-        );
+        let query = `UPDATE Profesionales SET 
+            nombres = ?, ap_paterno = ?, ap_materno = ?, especialidad = ?, 
+            telefono = ?, direccion = ?, comuna = ?, email = ?, 
+            tipo_contrato = ?, valor_hora_base = ?, registro_sis = ?, color = ?`;
+
+        const params = [nombres, ap_paterno, ap_materno, especialidad, telefono, direccion, comuna, email, tipo_contrato, valor_hora_base, registro_sis, color];
+
+        if (activo !== undefined) {
+            query += `, activo = ?`;
+            params.push(activo);
+        }
+
+        if (req.file) {
+            query += `, url_foto = ?`;
+            params.push(`/uploads/profesionales/${req.file.filename}`);
+        }
+
+        query += ` WHERE rut_prof = ?`;
+        params.push(rut);
+
+        const [result] = await pool.query(query, params);
 
         if (result.affectedRows === 0) {
             return res.status(404).json({ message: 'Profesional no encontrado' });
@@ -91,6 +122,7 @@ const updateProfesional = async (req, res) => {
 
         res.json({ message: 'Profesional actualizado exitosamente' });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ error: error.message });
     }
 };
@@ -150,5 +182,6 @@ module.exports = {
     createProfesional,
     updateProfesional,
     deleteProfesional,
-    getUsuarioVinculado
+    getUsuarioVinculado,
+    upload // Exportamos middleware upload
 };

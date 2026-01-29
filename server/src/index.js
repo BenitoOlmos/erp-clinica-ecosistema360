@@ -14,17 +14,21 @@ app.use(cors({
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
+app.use('/uploads', express.static('uploads'));
 
 // Routes
 const authRoutes = require('./routes/authRoutes');
 const clientesRoutes = require('./routes/clientesRoutes');
 const profesionalesRoutes = require('./routes/profesionalesRoutes');
+const serviciosRoutes = require('./routes/serviciosRoutes');
 const citasRoutes = require('./routes/citasRoutes');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/clientes', clientesRoutes);
 app.use('/api/profesionales', profesionalesRoutes);
+app.use('/api/servicios', serviciosRoutes);
 app.use('/api/citas', citasRoutes);
+app.use('/api/programas', require('./routes/programasRoutes'));
 
 // Root route
 app.get('/', (req, res) => {

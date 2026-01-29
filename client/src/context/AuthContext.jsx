@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import axios from 'axios';
+import { authService } from '../services/api';
 
 const AuthContext = createContext();
 
@@ -28,7 +29,7 @@ export const AuthProvider = ({ children }) => {
 
     const loadUser = async () => {
         try {
-            const response = await authService.getCurrentUser(); // Use authService
+            const response = await authService.me(); // Corregido: api.js define 'me', no 'getCurrentUser'
             setUser(response.data);
         } catch (error) {
             console.error('Error cargando usuario:', error);
@@ -40,7 +41,8 @@ export const AuthProvider = ({ children }) => {
 
     const login = async (username, password) => {
         try {
-            const { token, user } = await authService.login(username, password); // Use authService
+            const response = await authService.login(username, password);
+            const { token, user } = response.data; // Desestructurar de response.data
 
             localStorage.setItem('token', token);
             setToken(token);

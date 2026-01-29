@@ -60,20 +60,43 @@ export const profesionalesService = {
     getAll: () => api.get('/profesionales'),
     getByRut: (rut) => api.get(`/profesionales/${rut}`),
     getUsuarioVinculado: (rut) => api.get(`/profesionales/${rut}/usuario`),
-    create: (data) => api.post('/profesionales', data),
-    update: (rut, data) => api.put(`/profesionales/${rut}`, data),
+    create: (data) => {
+        const isFormData = data instanceof FormData;
+        return api.post('/profesionales', data, {
+            headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : undefined
+        });
+    },
+    update: (rut, data) => {
+        const isFormData = data instanceof FormData;
+        return api.put(`/profesionales/${rut}`, data, {
+            headers: isFormData ? { 'Content-Type': 'multipart/form-data' } : undefined
+        });
+    },
     delete: (rut) => api.delete(`/profesionales/${rut}`),
 };
 
+export const serviciosService = {
+    getAll: () => api.get('/servicios'),
+    getById: (id) => api.get(`/servicios/${id}`),
+    create: (data) => api.post('/servicios', data),
+    update: (id, data) => api.put(`/servicios/${id}`, data),
+    delete: (id) => api.delete(`/servicios/${id}`),
+};
+
 export const citasService = {
-    getAll: (params) => api.get('/citas', { params }),
-    getById: (id) => api.get(`/citas/${id}`),
-    getByProfesional: (rut) => api.get(`/citas/profesional/${rut}`),
-    getByCliente: (rut) => api.get(`/citas/cliente/${rut}`),
+    getAll: (params) => api.get('/citas', { params }), // params: { start, end, rut_prof }
+    getById: (id) => api.get(`/citas/${id}`), // Placeholder if we add getById route later
     create: (data) => api.post('/citas', data),
     update: (id, data) => api.put(`/citas/${id}`, data),
-    updateEstado: (id, estado) => api.put(`/citas/${id}/estado`, { estado }),
     delete: (id) => api.delete(`/citas/${id}`),
+};
+
+export const programasService = {
+    getAll: () => api.get('/programas'),
+    create: (data) => api.post('/programas', data),
+    update: (id, data) => api.put(`/programas/${id}`, data),
+    delete: (id) => api.delete(`/programas/${id}`),
+    assign: (data) => api.post('/programas/asignar', data)
 };
 
 export const authService = {

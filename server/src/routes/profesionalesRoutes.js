@@ -7,7 +7,8 @@ const {
     createProfesional,
     updateProfesional,
     deleteProfesional,
-    getUsuarioVinculado
+    getUsuarioVinculado,
+    upload
 } = require('../controllers/profesionalesController');
 
 // Proteger todas las rutas
@@ -16,8 +17,8 @@ router.use(authMiddleware);
 router.get('/', getAllProfesionales);
 router.get('/:rut', getProfesionalByRut);
 router.get('/:rut/usuario', getUsuarioVinculado);
-router.post('/', createProfesional);
-router.put('/:rut', updateProfesional);
+router.post('/', upload.single('foto'), createProfesional);
+router.put('/:rut', upload.single('foto'), updateProfesional);
 router.delete('/:rut', deleteProfesional);
 
 module.exports = router;

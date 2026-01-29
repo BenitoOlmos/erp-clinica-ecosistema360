@@ -2,7 +2,9 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
 import { ClientesPage } from './pages/ClientesPage';
 import { ProfesionalesPage } from './pages/ProfesionalesPage';
+import { ServiciosPage } from './pages/ServiciosPage';
 import { CalendarioPage } from './pages/CalendarioPage';
+import { ProgramasPage } from './pages/ProgramasPage';
 import { LoginPage } from './pages/LoginPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { useAuth } from './context/AuthContext';
@@ -20,7 +22,9 @@ function App() {
         <Route index element={<Dashboard />} />
         <Route path="/clientes" element={<ClientesPage />} />
         <Route path="/profesionales" element={<ProfesionalesPage />} />
+        <Route path="/servicios" element={<ServiciosPage />} />
         <Route path="/calendario" element={<CalendarioPage />} />
+        <Route path="/programas" element={<ProgramasPage />} />
         {/* Add more routes here */}
       </Route>
     </Routes>

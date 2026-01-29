@@ -1,44 +1,25 @@
 const pool = require('../config/db');
 
-// Get all citas with filters
+// Get all citas (optionally filtered by date range or professional)
 const getAllCitas = async (req, res) => {
     try {
-        const { fecha_desde, fecha_hasta, estado, modalidad, rut_prof, rut_cliente } = req.query;
-
+        const { start, end, rut_prof } = req.query;
         let query = `
-      SELECT 
-        c.*,
-        cl.nombres AS cliente_nombres,
-        cl.ap_paterno AS cliente_apellido,
-        p.especialidad,
-        u.nombre_completo AS profesional_nombre
-      FROM Calendario c
-      LEFT JOIN Clientes cl ON c.rut_cliente = cl.rut_cliente
-      LEFT JOIN Profesionales p ON c.rut_prof = p.rut_prof
-      LEFT JOIN Usuarios u ON p.rut_prof = u.rut_profesional
-      WHERE 1=1
-    `;
-
+            SELECT c.*, 
+                   cl.nombres as nombre_cliente, cl.ap_paterno as ap_cliente,
+                   p.nombres as nombre_prof, p.ap_paterno as ap_prof, p.color as color_prof, p.url_foto as foto_prof,
+                   s.nombre_servicio, s.tiempo as duracion
+            FROM Calendario c
+            LEFT JOIN Clientes cl ON c.rut_cliente = cl.rut_cliente
+            LEFT JOIN Profesionales p ON c.rut_prof = p.rut_prof
+            LEFT JOIN Servicios s ON c.id_servicio = s.id_servicio
+            WHERE 1=1
+        `;
         const params = [];
 
-        if (fecha_desde) {
-            query += ' AND c.fecha_hora >= ?';
-            params.push(fecha_desde);
-        }
-
-        if (fecha_hasta) {
-            query += ' AND c.fecha_hora <= ?';
-            params.push(fecha_hasta);
-        }
-
-        if (estado) {
-            query += ' AND c.estado = ?';
-            params.push(estado);
-        }
-
-        if (modalidad) {
-            query += ' AND c.modalidad = ?';
-            params.push(modalidad);
+        if (start && end) {
+            query += ' AND c.fecha BETWEEN ? AND ?';
+            params.push(start, end);
         }
 
         if (rut_prof) {
@@ -46,86 +27,9 @@ const getAllCitas = async (req, res) => {
             params.push(rut_prof);
         }
 
-        if (rut_cliente) {
-            query += ' AND c.rut_cliente = ?';
-            params.push(rut_cliente);
-        }
-
-        query += ' ORDER BY c.fecha_hora DESC';
+        query += ' ORDER BY c.fecha, c.hora';
 
         const [rows] = await pool.query(query, params);
-        res.json(rows);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-// Get cita by ID
-const getCitaById = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const [rows] = await pool.query(`
-      SELECT 
-        c.*,
-        cl.nombres AS cliente_nombres,
-        cl.ap_paterno AS cliente_apellido,
-        cl.email AS cliente_email,
-        p.especialidad,
-        u.nombre_completo AS profesional_nombre
-      FROM Calendario c
-      LEFT JOIN Clientes cl ON c.rut_cliente = cl.rut_cliente
-      LEFT JOIN Profesionales p ON c.rut_prof = p.rut_prof
-      LEFT JOIN Usuarios u ON p.rut_prof = u.rut_profesional
-      WHERE c.id_cita = ?
-    `, [id]);
-
-        if (rows.length === 0) {
-            return res.status(404).json({ message: 'Cita no encontrada' });
-        }
-
-        res.json(rows[0]);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-// Get citas by profesional
-const getCitasByProfesional = async (req, res) => {
-    try {
-        const { rut } = req.params;
-        const [rows] = await pool.query(`
-      SELECT 
-        c.*,
-        cl.nombres AS cliente_nombres,
-        cl.ap_paterno AS cliente_apellido
-      FROM Calendario c
-      LEFT JOIN Clientes cl ON c.rut_cliente = cl.rut_cliente
-      WHERE c.rut_prof = ?
-      ORDER BY c.fecha_hora DESC
-    `, [rut]);
-
-        res.json(rows);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-// Get citas by cliente
-const getCitasByCliente = async (req, res) => {
-    try {
-        const { rut } = req.params;
-        const [rows] = await pool.query(`
-      SELECT 
-        c.*,
-        p.especialidad,
-        u.nombre_completo AS profesional_nombre
-      FROM Calendario c
-      LEFT JOIN Profesionales p ON c.rut_prof = p.rut_prof
-      LEFT JOIN Usuarios u ON p.rut_prof = u.rut_profesional
-      WHERE c.rut_cliente = ?
-      ORDER BY c.fecha_hora DESC
-    `, [rut]);
-
         res.json(rows);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -135,38 +39,62 @@ const getCitasByCliente = async (req, res) => {
 // Create new cita
 const createCita = async (req, res) => {
     try {
-        const { rut_cliente, rut_prof, id_servicio, fecha_hora, estado, modalidad } = req.body;
+        const { rut_cliente, rut_prof, id_servicio, fecha, hora, estado, modalidad, comentarios, monto, tipo_pago, programa, estado_pago } = req.body;
 
-        // Validaciones
-        if (!rut_cliente || !rut_prof || !fecha_hora) {
-            return res.status(400).json({ message: 'Cliente, profesional y fecha/hora son requeridos' });
+        if (!rut_cliente || !rut_prof || !id_servicio || !fecha || !hora) {
+            return res.status(400).json({ message: 'Faltan campos obligatorios' });
         }
 
-        // Verificar que cliente existe
-        const [clientes] = await pool.query('SELECT rut_cliente FROM Clientes WHERE rut_cliente = ?', [rut_cliente]);
-        if (clientes.length === 0) {
-            return res.status(404).json({ message: 'Cliente no encontrado' });
-        }
+        // --- PROGRAM CHECK LOGIC START ---
+        let finalMonto = monto || 0;
+        let finalEstadoPago = estado_pago || 'Pendiente';
+        let finalIdVenta = null;
+        let finalPrograma = programa || '';
 
-        // Verificar que profesional existe
-        const [profesionales] = await pool.query('SELECT rut_prof FROM Profesionales WHERE rut_prof = ?', [rut_prof]);
-        if (profesionales.length === 0) {
-            return res.status(404).json({ message: 'Profesional no encontrado' });
-        }
+        // Only check if it's not already explicitly marked as paid or specific types
+        if (finalEstadoPago !== 'Pagado') {
+            const [sales] = await pool.query(
+                `SELECT cp.id_venta, cp.id_programa, p.nombre as nombre_programa 
+                 FROM Clientes_Programas cp
+                 JOIN Programas p ON cp.id_programa = p.id_programa
+                 WHERE cp.rut_cliente = ? AND cp.estado = 'Activo'`,
+                [rut_cliente]
+            );
 
-        // Verificar conflicto de horario (mismo profesional, misma hora)
-        const [conflictos] = await pool.query(
-            'SELECT id_cita FROM Calendario WHERE rut_prof = ? AND fecha_hora = ? AND estado != ?',
-            [rut_prof, fecha_hora, 'Cancelada']
-        );
+            for (const sale of sales) {
+                // Check if this program includes the service
+                const [progDetails] = await pool.query(
+                    'SELECT cantidad FROM Programas_Servicios WHERE id_programa = ? AND id_servicio = ?',
+                    [sale.id_programa, id_servicio]
+                );
 
-        if (conflictos.length > 0) {
-            return res.status(400).json({ message: 'El profesional ya tiene una cita agendada en ese horario' });
+                if (progDetails.length > 0) {
+                    const limit = progDetails[0].cantidad;
+
+                    // Check usage for this specific service in this sale
+                    const [usage] = await pool.query(
+                        'SELECT COUNT(*) as used FROM Calendario WHERE id_venta_programa = ? AND id_servicio = ?',
+                        [sale.id_venta, id_servicio]
+                    );
+
+                    if (usage[0].used < limit) {
+                        // Found a valid program!
+                        finalIdVenta = sale.id_venta;
+                        finalMonto = 0; // Covered by program
+                        finalEstadoPago = 'Pagado';
+                        finalPrograma = sale.nombre_programa; // Auto-fill program name
+                        console.log(`✅ Cita cubierta por programa: ${sale.nombre_programa} (Venta ID: ${sale.id_venta})`);
+                        break; // Stop looking
+                    }
+                }
+            }
         }
+        // --- PROGRAM CHECK LOGIC END ---
 
         const [result] = await pool.query(
-            'INSERT INTO Calendario (rut_cliente, rut_prof, id_servicio, fecha_hora, estado, modalidad) VALUES (?, ?, ?, ?, ?, ?)',
-            [rut_cliente, rut_prof, id_servicio || null, fecha_hora, estado || 'Agendada', modalidad || 'Presencial']
+            `INSERT INTO Calendario (rut_cliente, rut_prof, id_servicio, fecha, hora, estado, modalidad, comentarios, monto, tipo_pago, programa, estado_pago, id_venta_programa)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [rut_cliente, rut_prof, id_servicio, fecha, hora, estado || 'Programada', modalidad || 'Presencial', comentarios, finalMonto, tipo_pago, finalPrograma, finalEstadoPago, finalIdVenta]
         );
 
         res.status(201).json({
@@ -174,6 +102,7 @@ const createCita = async (req, res) => {
             id_cita: result.insertId
         });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ error: error.message });
     }
 };
@@ -182,11 +111,14 @@ const createCita = async (req, res) => {
 const updateCita = async (req, res) => {
     try {
         const { id } = req.params;
-        const { rut_cliente, rut_prof, id_servicio, fecha_hora, estado, modalidad } = req.body;
+        const { rut_cliente, rut_prof, id_servicio, fecha, hora, estado, modalidad, comentarios, monto, tipo_pago, programa, estado_pago } = req.body;
 
         const [result] = await pool.query(
-            'UPDATE Calendario SET rut_cliente = ?, rut_prof = ?, id_servicio = ?, fecha_hora = ?, estado = ?, modalidad = ? WHERE id_cita = ?',
-            [rut_cliente, rut_prof, id_servicio, fecha_hora, estado, modalidad, id]
+            `UPDATE Calendario SET 
+             rut_cliente = ?, rut_prof = ?, id_servicio = ?, fecha = ?, hora = ?, 
+             estado = ?, modalidad = ?, comentarios = ?, monto = ?, tipo_pago = ?, programa = ?, estado_pago = ?
+             WHERE id_cita = ?`,
+            [rut_cliente, rut_prof, id_servicio, fecha, hora, estado, modalidad, comentarios, monto, tipo_pago, programa, estado_pago, id]
         );
 
         if (result.affectedRows === 0) {
@@ -199,36 +131,12 @@ const updateCita = async (req, res) => {
     }
 };
 
-// Update only estado
-const updateEstado = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { estado } = req.body;
 
-        if (!estado) {
-            return res.status(400).json({ message: 'Estado es requerido' });
-        }
-
-        const [result] = await pool.query(
-            'UPDATE Calendario SET estado = ? WHERE id_cita = ?',
-            [estado, id]
-        );
-
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ message: 'Cita no encontrada' });
-        }
-
-        res.json({ message: 'Estado actualizado exitosamente' });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
 
 // Delete cita
 const deleteCita = async (req, res) => {
     try {
         const { id } = req.params;
-
         const [result] = await pool.query('DELETE FROM Calendario WHERE id_cita = ?', [id]);
 
         if (result.affectedRows === 0) {
@@ -243,11 +151,7 @@ const deleteCita = async (req, res) => {
 
 module.exports = {
     getAllCitas,
-    getCitaById,
-    getCitasByProfesional,
-    getCitasByCliente,
     createCita,
     updateCita,
-    updateEstado,
     deleteCita
 };

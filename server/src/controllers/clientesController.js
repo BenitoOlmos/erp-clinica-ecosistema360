@@ -29,11 +29,11 @@ const getClienteByRut = async (req, res) => {
 // Create new client
 const createCliente = async (req, res) => {
     try {
-        const { rut_cliente, nombres, ap_paterno, ap_materno, email, isapre, direccion } = req.body;
+        const { rut_cliente, nombres, ap_paterno, ap_materno, email, isapre, direccion, telefono, comuna } = req.body;
 
         const [result] = await pool.query(
-            'INSERT INTO Clientes (rut_cliente, nombres, ap_paterno, ap_materno, email, isapre, direccion) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [rut_cliente, nombres, ap_paterno, ap_materno, email, isapre, direccion]
+            'INSERT INTO Clientes (rut_cliente, nombres, ap_paterno, ap_materno, email, isapre, direccion, telefono, comuna) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [rut_cliente, nombres, ap_paterno, ap_materno, email, isapre, direccion, telefono, comuna]
         );
 
         res.status(201).json({ message: 'Cliente creado exitosamente', rut_cliente });
@@ -46,11 +46,11 @@ const createCliente = async (req, res) => {
 const updateCliente = async (req, res) => {
     try {
         const { rut } = req.params;
-        const { nombres, ap_paterno, ap_materno, email, isapre, direccion } = req.body;
+        const { nombres, ap_paterno, ap_materno, email, isapre, direccion, telefono, comuna } = req.body;
 
         const [result] = await pool.query(
-            'UPDATE Clientes SET nombres = ?, ap_paterno = ?, ap_materno = ?, email = ?, isapre = ?, direccion = ? WHERE rut_cliente = ?',
-            [nombres, ap_paterno, ap_materno, email, isapre, direccion, rut]
+            'UPDATE Clientes SET nombres = ?, ap_paterno = ?, ap_materno = ?, email = ?, isapre = ?, direccion = ?, telefono = ?, comuna = ? WHERE rut_cliente = ?',
+            [nombres, ap_paterno, ap_materno, email, isapre, direccion, telefono, comuna, rut]
         );
 
         if (result.affectedRows === 0) {
